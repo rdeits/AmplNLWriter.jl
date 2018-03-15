@@ -135,6 +135,7 @@ mutable struct AmplNLMathProgModel <: AbstractMathProgModel
     solve_result::String
     solve_message::String
     solve_time::Float64
+    solver_output_stream::IO
 
     d::AbstractNLPEvaluator
 
@@ -176,7 +177,8 @@ mutable struct AmplNLMathProgModel <: AbstractMathProgModel
             -1,
             "?",
             "",
-            NaN)
+            NaN,
+            STDOUT)
     end
 end
 mutable struct AmplNLLinearQuadraticModel <: AbstractLinearQuadraticModel
@@ -409,7 +411,7 @@ function optimize!(m::AmplNLMathProgModel)
     # Run solver and save exitcode
     t = time()
     proc = spawn(pipeline(
-        `$(m.solver_command) $(m.probfile) -AMPL $(m.options)`, stdout=STDOUT))
+        `$(m.solver_command) $(m.probfile) -AMPL $(m.options)`, stdout=m.solver_output_stream))
     wait(proc)
     kill(proc)
     m.solve_exitcode = proc.exitcode
@@ -480,6 +482,8 @@ get_solve_result(m::AmplNLMathProgModel) = m.solve_result
 get_solve_result_num(m::AmplNLMathProgModel) = m.solve_result_num
 get_solve_message(m::AmplNLMathProgModel) = m.solve_message
 get_solve_exitcode(m::AmplNLMathProgModel) = m.solve_exitcode
+get_solver_output_stream(m::AmplNLMathProgModel) = m.solver_output_stream
+set_solver_output_stream!(m::AmplNLMathProgModel, io::IO) = m.solver_output_stream = io
 
 # We need to track linear coeffs of all variables present in the expression tree
 extract_variables!(lin_constr::Dict{Int, Float64}, c) = c
@@ -768,11 +772,11 @@ function evaluate_linear(linear_coeffs::Dict{Int, Float64}, x::Array{Float64})
 end
 
 # Wrapper functions
-for f in [:getvartype,:getsense,:optimize!,:status,:getsolution,:getobjval,:numvar,:numconstr,:get_solve_result,:get_solve_result_num,:get_solve_message,:get_solve_exitcode,:getsolvetime]
+for f in [:getvartype,:getsense,:optimize!,:status,:getsolution,:getobjval,:numvar,:numconstr,:get_solve_result,:get_solve_result_num,:get_solve_message,:get_solve_exitcode,:get_solver_output_stream,:getsolvetime]
     @eval $f(m::AmplNLNonlinearModel) = $f(m.inner)
     @eval $f(m::AmplNLLinearQuadraticModel) = $f(m.inner)
 end
-for f in [:setvartype!,:setsense!,:setwarmstart!]
+for f in [:setvartype!,:setsense!,:setwarmstart!,:set_solver_output_stream!]
     @eval $f(m::AmplNLNonlinearModel, x) = $f(m.inner, x)
     @eval $f(m::AmplNLLinearQuadraticModel, x) = $f(m.inner, x)
 end
